@@ -108,14 +108,13 @@ public class UploadPDF
 
         _logger.LogInformation("Completed upload, calling Azure AI Search indexer...");
         SearchIndexerClient indexerClient = new SearchIndexerClient(new Uri(searchEndpoint), new AzureKeyCredential(adminSearchKey));
-        await indexerClient.RunIndexerAsync(blobIndexerName);
         try
         {
             await indexerClient.RunIndexerAsync(blobIndexerName);
         }
         catch (RequestFailedException ex) when (ex.Status == 429)
         {
-            Console.WriteLine("Failed to run indexer: {0}", ex.Message);
+            _logger.LogWarning("Indexer already running: {0}", ex.Message);
         }
 
         var response = req.CreateResponse(HttpStatusCode.OK);

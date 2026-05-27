@@ -1,5 +1,11 @@
 {
     "version": "2.0",
+    "functionTimeout": "00:30:00",
+    "extensions": {
+        "http": {
+            "maxRequestBodySize": 1073741824
+        }
+    },
     "logging": {
         "applicationInsights": {
             "samplingSettings": {

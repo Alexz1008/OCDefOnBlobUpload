@@ -22,6 +22,7 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Storage.Blobs" Version="6.8.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.5" />
     <PackageReference Include="Microsoft.Azure.Search.Service" Version="10.1.0" />
+    <PackageReference Include="PDFsharp" Version="6.2.4" />
   </ItemGroup>
 
 </Project>

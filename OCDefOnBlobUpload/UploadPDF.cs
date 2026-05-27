@@ -8,6 +8,8 @@ using HttpMultipartParser;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
+using PdfSharp.Pdf;
+using PdfSharp.Pdf.IO;
 using System.Net;
 
 namespace OCDefOnBlobUpload;
@@ -83,27 +85,43 @@ public class UploadPDF
         string caseNumber = caseNumberParam.Data;
         _logger.LogInformation($"Processing upload for case number: {caseNumber}");
 
+        const int maxPagesPerChunk = 1000;
+
         BlobContainerClient container = new BlobContainerClient(pdfUri, cred);
         _logger.LogInformation("Successfully connected to blob container " + container.AccountName + "/" + container.Name);
         foreach (var file in parser.Files)
         {
-            // Upload the file to blob storage
             var originalFileName = file.FileName ?? "uploaded_file.pdf";
             var fileExtension = Path.GetExtension(originalFileName);
             var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(originalFileName);
-            var fileName = $"{fileNameWithoutExtension}_CN_{caseNumber}{fileExtension}";
-            BlobClient blob = container.GetBlobClient(fileName);
-            _logger.LogInformation($"Uploading {fileName} for archiving...");
+
             using var memoryStream = new MemoryStream();
             await file.Data.CopyToAsync(memoryStream);
             memoryStream.Position = 0;
-            await blob.UploadAsync(memoryStream, overwrite: true);
-            var tags = new Dictionary<string, string>
+
+            using var inputDoc = PdfReader.Open(memoryStream, PdfDocumentOpenMode.Import);
+            int totalPages = inputDoc.PageCount;
+            _logger.LogInformation($"PDF {originalFileName} has {totalPages} pages.");
+
+            if (totalPages <= maxPagesPerChunk)
             {
-                { "CaseNumber", caseNumber }
-            };
-            await blob.SetTagsAsync(tags);
-            _logger.LogInformation("Upload complete.");
+                // Small enough — upload as a single file
+                var fileName = $"{fileNameWithoutExtension}_CN_{caseNumber}{fileExtension}";
+                await UploadPdfToBlob(container, fileName, inputDoc, 0, totalPages, caseNumber);
+            }
+            else
+            {
+                // Split into chunks of maxPagesPerChunk
+                int totalChunks = (int)Math.Ceiling((double)totalPages / maxPagesPerChunk);
+                _logger.LogInformation($"Splitting {originalFileName} into {totalChunks} chunks of up to {maxPagesPerChunk} pages.");
+                for (int chunk = 0; chunk < totalChunks; chunk++)
+                {
+                    int startPage = chunk * maxPagesPerChunk;
+                    int endPage = Math.Min(startPage + maxPagesPerChunk, totalPages);
+                    var fileName = $"{fileNameWithoutExtension}_CN_{caseNumber}_part{chunk + 1}{fileExtension}";
+                    await UploadPdfToBlob(container, fileName, inputDoc, startPage, endPage, caseNumber);
+                }
+            }
         }
 
         _logger.LogInformation("Completed upload, calling Azure AI Search indexer...");
@@ -120,5 +138,28 @@ public class UploadPDF
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteStringAsync("Upload and indexing complete!");
         return response;
+    }
+
+    private async Task UploadPdfToBlob(BlobContainerClient container, string fileName, PdfDocument sourceDoc, int startPage, int endPage, string caseNumber)
+    {
+        using var chunkDoc = new PdfDocument();
+        for (int i = startPage; i < endPage; i++)
+        {
+            chunkDoc.AddPage(sourceDoc.Pages[i]);
+        }
+
+        using var uploadStream = new MemoryStream();
+        chunkDoc.Save(uploadStream);
+        uploadStream.Position = 0;
+
+        BlobClient blob = container.GetBlobClient(fileName);
+        _logger.LogInformation($"Uploading {fileName} ({endPage - startPage} pages) for archiving...");
+        await blob.UploadAsync(uploadStream, overwrite: true);
+        var tags = new Dictionary<string, string>
+        {
+            { "CaseNumber", caseNumber }
+        };
+        await blob.SetTagsAsync(tags);
+        _logger.LogInformation($"Upload of {fileName} complete.");
     }
 }

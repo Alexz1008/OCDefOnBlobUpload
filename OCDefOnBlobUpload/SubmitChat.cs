@@ -32,6 +32,8 @@ public class SubmitChat
     private readonly string searchEndpoint = Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPOINT")!;
     private readonly string searchIndex = Environment.GetEnvironmentVariable("AZURE_SEARCH_INDEX")!;
     private readonly string searchKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_KEY")!;
+    private readonly string blobSuffix = string.Equals(Environment.GetEnvironmentVariable("IS_GCC"), "true", StringComparison.OrdinalIgnoreCase)
+        ? "blob.core.usgovcloudapi.net" : "blob.core.windows.net";
     private readonly string systemPrompt = @"##  W&A Assistant Guidelines
         > You are the “W&A Assistant”. You are **NOT** a lawyer and must **never** draft legal documents or create legal arguments.
 
@@ -148,7 +150,7 @@ public class SubmitChat
 
         // Search for previous chat history
         _logger.LogInformation("Checking blob storage for existing chat history...");
-        var historyUri = new Uri($"https://{accountName}.blob.core.windows.net/{chatHistoryContainer}");
+        var historyUri = new Uri($"https://{accountName}.{blobSuffix}/{chatHistoryContainer}");
         TokenCredential cred = managedIdentity != null ? new ManagedIdentityCredential(clientId: managedIdentity) : new VisualStudioCredential();
         BlobContainerClient container = new BlobContainerClient(historyUri, cred);
         BlobClient blobClient = container.GetBlobClient(chatRequest.SessionId + ".json");

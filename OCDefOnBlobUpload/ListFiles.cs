@@ -16,6 +16,8 @@ public class ListFiles
     private readonly string? managedIdentity = Environment.GetEnvironmentVariable("MANAGED_IDENTITY_CLIENT_ID");
     private readonly string accountName = Environment.GetEnvironmentVariable("STORAGE_ACCOUNT_NAME")!;
     private readonly string filesContainer = Environment.GetEnvironmentVariable("FILES_CONTAINER")!;
+    private readonly string blobSuffix = string.Equals(Environment.GetEnvironmentVariable("IS_GCC"), "true", StringComparison.OrdinalIgnoreCase)
+        ? "blob.core.usgovcloudapi.net" : "blob.core.windows.net";
 
     public ListFiles(ILogger<ListFiles> logger)
     {
@@ -47,7 +49,7 @@ public class ListFiles
                 : new VisualStudioCredential();
 
             // Connect to blob service
-            var serviceUri = new Uri($"https://{accountName}.blob.core.windows.net");
+            var serviceUri = new Uri($"https://{accountName}.{blobSuffix}");
             var blobServiceClient = new BlobServiceClient(serviceUri, cred);
             var matchingFiles = new List<string>();
             string tagFilter = $"CaseNumber = '{caseNumber}'";

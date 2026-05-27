@@ -25,6 +25,8 @@ public class UploadPDF
     private readonly string searchEndpoint = Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPOINT")!;
     private readonly string adminSearchKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_ADMIN_KEY")!;
     private readonly string blobIndexerName = Environment.GetEnvironmentVariable("AZURE_BLOB_INDEXER_NAME")!;
+    private readonly string blobSuffix = string.Equals(Environment.GetEnvironmentVariable("IS_GCC"), "true", StringComparison.OrdinalIgnoreCase)
+        ? "blob.core.usgovcloudapi.net" : "blob.core.windows.net";
 
     public UploadPDF(ILogger<UploadPDF> logger)
     {
@@ -37,7 +39,7 @@ public class UploadPDF
     {
         _logger.LogInformation("HTTP trigger function processed a request.");
         TokenCredential cred = managedIdentity != null ? new ManagedIdentityCredential(clientId: managedIdentity) : new VisualStudioCredential();
-        var pdfUri = new Uri($"https://{accountName}.blob.core.windows.net/{filesContainer}");
+        var pdfUri = new Uri($"https://{accountName}.{blobSuffix}/{filesContainer}");
         _logger.LogInformation("Successfully authenticated function");
 
         // Validate request

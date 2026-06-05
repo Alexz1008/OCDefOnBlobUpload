@@ -60,6 +60,7 @@ public class SubmitChat
         ### GROUNDING
 
         -   Answer **only** with information grounded in the retrieved documents and official government documents.
+        -   Each retrieved context block is prefixed with `Source: <document title>`. Use the document title as the citation name.
         -   For every non-trivial answer, include **inline citations**:  
             `[DocName, page/section]`
         -   If the answer **cannot be found** in the provided materials, reply:
@@ -135,7 +136,7 @@ public class SubmitChat
         var searchOptions = new SearchOptions
         {
             Size = 5,
-            Select = { "chunk" },
+            Select = { "chunk", "title" },
             Filter = $"CaseNumber eq '{chatRequest.CaseNumber}'"
         };
 
@@ -144,8 +145,8 @@ public class SubmitChat
         var searchClient = new SearchClient(new Uri(searchEndpoint), searchIndex, new AzureKeyCredential(searchKey));
         var searchResults = await searchClient.SearchAsync<SearchDocument>(chatRequest.Message, searchOptions);
         var relevantChunks = searchResults.Value.GetResults()
-            .Select(r => r.Document["chunk"]?.ToString())
-            .Where(s => !string.IsNullOrEmpty(s))
+            .Select(r => new { Chunk = r.Document["chunk"]?.ToString(), Title = r.Document.ContainsKey("title") ? r.Document["title"]?.ToString() : null })
+            .Where(r => !string.IsNullOrEmpty(r.Chunk))
             .ToList();
 
         // Search for previous chat history
@@ -197,7 +198,8 @@ public class SubmitChat
         // Add AI search results as context, then add user query
         foreach (var relevantChunk in relevantChunks)
         {
-            messages = messages.Append(new AssistantChatMessage($"Context: {relevantChunk}")).ToArray();
+            var source = !string.IsNullOrEmpty(relevantChunk.Title) ? $"Source: {relevantChunk.Title}\n" : "";
+            messages = messages.Append(new AssistantChatMessage($"{source}Context: {relevantChunk.Chunk}")).ToArray();
         }
         chatHistory.AddMessage(ChatHistory.Role.USER, chatRequest.Message);
         messages = messages.Append(new UserChatMessage($"User Question: {chatRequest.Message}")).ToArray();
